@@ -12,6 +12,7 @@ class Server{
 		if(json == null || json == {})return;
 
 		Reflect.setField(json, 'ip', php.Web.getClientIP());
+		Reflect.setField(json, 'timestamp', haxe.Timer.stamp());
 
 		var appendString = (sys.FileSystem.exists(outputFile) ? ',\n' : '') + haxe.Json.stringify(json);
 

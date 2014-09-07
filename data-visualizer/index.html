@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<link rel="stylesheet" type="text/css" href="./css/dataTables/jquery.dataTables.css">
+
+	<style type="text/css">
+	html{
+		font-family: helvetica;
+		font-size: 12px;
+	}
+	th{
+		font-size: 20px;
+	}
+	tr{
+		cursor: pointer;
+	}
+	td{
+		position: relative;
+		overflow: hidden;
+	}
+
+	.cell{
+		text-align: center;
+		cursor: pointer;
+		max-height: 20px;
+		transition: max-height ease-out 0.2s;
+	}
+	.cell:hover{
+		max-height: 200px;
+		transition: max-height ease-in 0.2s;
+		transition-delay: 0.1s;
+	}
+
+	.vex-json-display{
+		box-shadow: 0px 5px 7px rgba(0,0,0,0.47);
+		overflow: hidden;
+	}
+
+	.vex-json-display .vex-close{
+		z-index: 9999;
+	}
+	</style>
+</head>
+<body>
+
+
+<table id="data-table" class="display compact">
+</table>
+
+<script type="text/javascript" src="./js/lodash.js"></script>
+
+<script type="text/javascript" src="./js/jquery.js"></script>
+<script type="text/javascript" src="./js/jquery.dataTables.min.js"></script>
+
+<script type="text/javascript" src="./js/vex.combined.min.js"></script>
+<link rel="stylesheet" type="text/css" href="./css/vex/vex.css">
+<link rel="stylesheet" type="text/css" href="./css/vex/vex-theme-default.css">
+<link rel="stylesheet" type="text/css" href="./css/vex/vex-theme-plain.css">
+<link rel="stylesheet" type="text/css" href="./css/vex/vex-theme-bottom-right-corner.css">
+<script>vex.defaultOptions.className = 'vex-theme-bottom-right-corner';</script>
+
+<script src="./js/ace/ace.js"></script>
+
+<script type="text/javascript" src="./js/moment.js"></script>
+
+<script type="text/javascript">
+	function extractProperties(object, recursive){
+		var result = [];
+		(function iterate(o, parent){
+			for(var property in o){
+				if(o[property] !== null && typeof o[property] === 'object' && recursive === true){
+					iterate(o[property], property);	
+				}else{
+					var pname = (parent ? parent+'.' : '') + property;
+					if(result.indexOf(pname) === -1) result.push(pname);
+				}
+			}
+		})(object);
+		return result;
+	}
+</script>
+<script type="text/javascript">
+	function loadBrowserData(url, ignoredProperties, ignoredIPs){
+		ignoredProperties = typeof ignoredProperties !== 'undefined' ? ignoredProperties : [];
+		ignoredIPs = typeof ignoredIPs !== 'undefined' ? ignoredIPs : [];
+
+		$.ajax({
+			url: url,
+			cache: false
+		}).done(function( str ) {
+			recievedJSON(JSON.parse('['+str+']'));
+		});
+
+		function recievedJSON(json){
+			//remove unwanted entries
+			json = _.reject(json, function(o){
+				return _.contains(ignoredIPs, o.ip);
+			});
+
+			//extract headers
+			var headers = [];
+			json.forEach(function(o){
+				var propterties = extractProperties(o, true);
+				headers = _.union(headers, propterties);
+			});
+
+			//remove unwanted headers
+			headers = _.reject(headers, function(h){
+				return _.contains(ignoredProperties, h);
+			});
+
+			columns = [];
+			headers.forEach(function(h){
+				var col = {
+					'data': h,
+					'title': h,
+				};
+
+				var createdCellAdditional = function(td, cellData, rowData, row, col){};
+				var createdCell = function(td, cellData, rowData, row, col){
+					createdCellAdditional(td, cellData, rowData, row, col);
+					$(td).wrapInner('<div class="cell"></div>');
+				}
+
+				switch(h){
+					case 'timestamp':
+						createdCellAdditional = function(td, cellData, rowData, row, col){
+							if(!cellData)return;
+							$(td).html(moment.unix(cellData).format("h:mma | DD/MM/YY"));
+						}
+					break;
+				}
+				col['createdCell'] = createdCell;
+				columns.push(col);
+			});
+
+			var openJSONVex;
+			var displayJSON = function (json) {
+				var jsonString = JSON.stringify(json, null, "\t");
+				if(!openJSONVex){
+					vex.open({
+						content: '',
+						contentClassName: 'vex-json-display',
+						afterOpen: function($v) {
+							openJSONVex = this;
+							var $editorEl = $('<div class="json-display-editor"></div>');
+							$v.append($editorEl);
+
+							//activate ace editor 
+							var editor = ace.edit($editorEl[0]);
+							editor.setTheme("ace/theme/monokai");
+							editor.getSession().setMode("ace/mode/json");
+
+							editor.renderer.setShowGutter(false);//hide line numbers
+
+							editor.setOptions({
+								readOnly: true,
+								highlightActiveLine: false,
+								highlightGutterLine: false,
+								maxLines: 30
+							});
+							editor.renderer.$cursorLayer.element.style.opacity=0;
+							editor.getSession().setUseWrapMode(true);
+
+							editor.blur();
+						editor.selection.clearSelection();
+
+							openJSONVex.editor = editor;
+						openJSONVex.editor.setValue(jsonString, -1);
+
+						editor.renderer.on('resize',function(a,b){
+							var backgroundColor = getComputedStyle($editorEl[0]).backgroundColor;
+							$v.css('backgroundColor', backgroundColor);
+						});
+							return $v;
+						},
+						afterClose: function($v){
+							openJSONVex = null;
+						}
+					});
+				}else{
+					openJSONVex.editor.setValue(jsonString, -1);
+				}
+			}
+
+			//create dataTable
+			var oldAlert = alert;
+			alert = function(message){console.log(message)};//quieten alert
+			dataTable = $('#data-table').dataTable({
+					'data': json,
+					'columns': columns,
+					'order' : [_.findIndex(columns, {data:'timestamp'}), 'desc'], //order by timestamp
+					'createdRow': function( row, data, dataIndex ) {
+						$(row).click(function(){
+							displayJSON(data);
+						});    
+					},
+					'pageLength': 100
+			});
+		}
+	}
+</script>
+<script type="text/javascript">
+	var ignoredProperties = [
+		'userData.fluidScale',
+		'userData.fluidIterations',
+		'userData.scaleFactor',
+		'userData.particleCount',
+		'userData.texture_float',
+		'userData.texture_float_linear',
+		'windowWidth',
+		'windowHeight',
+	];
+
+	var ignoredIPs = [
+		'77.99.42.82',
+	];
+
+	loadBrowserData("http://awestronomer.com/services/browser-monitor/browser-data.txt", ignoredProperties, ignoredIPs);
+</script>
+
+</body>
+</html>
