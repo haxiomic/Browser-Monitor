@@ -1,0 +1,9 @@
+{
+  "name": "browsermonitor",
+  "url": "https://github.com/haxiomic/Browser-Monitor",
+  "license": "MIT",
+  "tags": [],
+  "description": "Tool for keeping track of browser data",
+  "version": "0.0.1",
+  "releasenote": "",
+}
