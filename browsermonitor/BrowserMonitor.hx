@@ -21,18 +21,17 @@ class BrowserMonitor{
 	public var userData:Dynamic = {};
 
 	var app:Application;
-	var storeConsoleOutput:Bool = false;
+	var recordConsoleOutput:Bool = false;
 	var beginTime:Float;
 	var timeSamples:Int = 0;
 	var serverURL:String;
 
-	public function new(?serverURL:String = null, ?app:Application, storeConsoleOutput:Bool = false){
-		#if !js
-		return;
-		#end
+	public function new(?serverURL:String = null, ?app:Application, recordConsoleOutput:Bool = false){
+		#if js
+
 		this.serverURL = serverURL;
 		this.app = app;
-		this.storeConsoleOutput = storeConsoleOutput;
+		this.recordConsoleOutput = recordConsoleOutput;
 		this.userAgent = js.Browser.navigator.userAgent; 
 		this.browserName = js.Lib.eval("
 			(function(){
@@ -59,7 +58,7 @@ class BrowserMonitor{
 			mouseClicks++;
 		});
 
-		if(storeConsoleOutput){
+		if(recordConsoleOutput){
 			consoleLog = new Array<String>();
 			consoleError = new Array<String>();
 			consoleWarn = new Array<String>();
@@ -83,6 +82,8 @@ class BrowserMonitor{
 				})();
 			}
 		}
+
+		#end
 	}
 
 	public function sendReportAfterTime(seconds:Int){
@@ -90,6 +91,7 @@ class BrowserMonitor{
 	}
 
 	public function sendReport(){
+		#if js
 		if(serverURL == null)return;
 		var data = createReportJSON();
 		trace('Sending performance data', data);
@@ -97,6 +99,7 @@ class BrowserMonitor{
 		request.open('POST', serverURL, true);
 		request.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
 		request.send(data);
+		#end
 	}
 
 	public inline function isSafari():Bool return (~/Safari/i).match(browserName);
@@ -123,7 +126,7 @@ class BrowserMonitor{
 			mouseClicks         : mouseClicks,
 			userData            : userData,
 		};
-		if(storeConsoleOutput) 
+		if(recordConsoleOutput) 
 			Reflect.setField(json, 'console',{
 				log   : consoleLog,
 				error : consoleError,

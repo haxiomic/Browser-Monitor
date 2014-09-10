@@ -1,5 +1,6 @@
 package;
 
+import haxe.web.Dispatch;
 import php.Web;
 
 class Server{
@@ -20,4 +21,15 @@ class Server{
 		fileStream.writeString(appendString);
 		fileStream.close();
 	}
+
+	inline function getDispatchUri() : String {
+        #if php
+        //Get the index file location
+        var src : String = untyped __var__('_SERVER', 'SCRIPT_NAME');
+        //Remove server subfolders from URI
+        return StringTools.replace(Web.getURI(), src.substr(0, src.length - "/index.php".length), "");
+        #elseif neko
+        return Web.getURI();
+        #end
+    }
 }
