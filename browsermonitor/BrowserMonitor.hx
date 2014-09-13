@@ -17,14 +17,18 @@ class BrowserMonitor{
 
 	public var userData:Dynamic = {};
 
+	public var onSendCallback:Dynamic->Void;
+
 	var recordConsoleOutput:Bool = false;
 	var serverURL:String;
 
-	public function new(?serverURL:String = null, recordConsoleOutput:Bool = false){
-		#if js
+	var startTime:Float;
 
+	public function new(?serverURL:String = null, recordConsoleOutput:Bool = false, ?onSendCallback:Dynamic->Void){
+		#if js
 		this.serverURL = serverURL;
 		this.recordConsoleOutput = recordConsoleOutput;
+		this.onSendCallback = onSendCallback;
 		this.userAgent = js.Browser.navigator.userAgent; 
 		this.browserName = js.Lib.eval("
 			(function(){
@@ -76,25 +80,39 @@ class BrowserMonitor{
 			}
 		}
 
+		this.startTime = haxe.Timer.stamp();
 		#end
 	}
 
-	public function sendReportAfterTime(seconds:Int, ?onSendCallback:Dynamic->Void){
-		haxe.Timer.delay(function(){
+	public function sendReportAfterTime(seconds:Int) 
+		haxe.Timer.delay(function() sendReport(), seconds * 1000 );
+
+
+	//Be cautious of using this method! It introduces a syncronous request which prevents the window from closing
+	public function sendReportOnExit(?timeout_ms:Int = 500){
+		js.Browser.window.onbeforeunload = function(e:Dynamic){
+			var timeOnPage = haxe.Timer.stamp() - startTime;
 			var report = createReportJSON();
-			if(onSendCallback != null) onSendCallback(report);
-			sendReport(report);
-		}, seconds * 1000 );
+			Reflect.setField(report, 'timeOnPage', timeOnPage);
+			sendReport(report, false, timeout_ms);
+		}
 	}
 
-	public function sendReport(report:Dynamic){
-		#if js
+	public function sendReport(?report:Dynamic, async:Bool = true, ?timeout_ms:Int){
+		#if !js return #end
 		if(serverURL == null)return;
+		if(report == null)report = createReportJSON();
+		if(Reflect.isFunction(onSendCallback)) onSendCallback(report);
 		var request = new js.html.XMLHttpRequest();
-		request.open('POST', serverURL, true);
+		request.open('POST', serverURL, async);
 		request.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
 		request.send(haxe.Json.stringify(report));
-		#end
+
+		if(timeout_ms != null){
+			haxe.Timer.delay(function(){
+				request.abort();
+			}, timeout_ms);
+		}
 	}
 
 	public inline function isSafari():Bool return (~/Safari/i).match(browserName);
