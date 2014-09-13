@@ -9,9 +9,6 @@ class BrowserMonitor{
 	public var windowWidth(default, null):Int;
 	public var windowHeight(default, null):Int;
 
-	public var averageFPS(default, null):Float = 0;
-	public var averageFrameTime(default, null):Float = 0; //ms
-
 	public var mouseClicks(default, null):Int = 0;
 
 	public var consoleLog:Array<String>;
@@ -20,17 +17,13 @@ class BrowserMonitor{
 
 	public var userData:Dynamic = {};
 
-	var app:Application;
 	var recordConsoleOutput:Bool = false;
-	var beginTime:Float;
-	var timeSamples:Int = 0;
 	var serverURL:String;
 
-	public function new(?serverURL:String = null, ?app:Application, recordConsoleOutput:Bool = false){
+	public function new(?serverURL:String = null, recordConsoleOutput:Bool = false){
 		#if js
 
 		this.serverURL = serverURL;
-		this.app = app;
 		this.recordConsoleOutput = recordConsoleOutput;
 		this.userAgent = js.Browser.navigator.userAgent; 
 		this.browserName = js.Lib.eval("
@@ -86,19 +79,21 @@ class BrowserMonitor{
 		#end
 	}
 
-	public function sendReportAfterTime(seconds:Int){
-		haxe.Timer.delay(this.sendReport, seconds * 1000 );
+	public function sendReportAfterTime(seconds:Int, ?onSendCallback:Dynamic->Void){
+		haxe.Timer.delay(function(){
+			var report = createReportJSON();
+			if(onSendCallback != null) onSendCallback(report);
+			sendReport(report);
+		}, seconds * 1000 );
 	}
 
-	public function sendReport(){
+	public function sendReport(report:Dynamic){
 		#if js
 		if(serverURL == null)return;
-		var data = createReportJSON();
-		trace('Sending performance data', data);
 		var request = new js.html.XMLHttpRequest();
 		request.open('POST', serverURL, true);
 		request.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
-		request.send(data);
+		request.send(haxe.Json.stringify(report));
 		#end
 	}
 
@@ -106,23 +101,12 @@ class BrowserMonitor{
 	public inline function isChrome():Bool return (~/Chrome/i).match(browserName);
 	public inline function isFirefox():Bool return (~/Firefox/i).match(browserName);
 
-	public inline function addDt(dt_ms:Float){
-		if((dt_ms > 8.3) && (dt_ms < (1000/5))){
-			averageFrameTime = (averageFrameTime/(1+1/timeSamples)) + (dt_ms/(timeSamples+1));
-			averageFPS = 1000/averageFrameTime;
-			timeSamples++;
-		}
-	}
-
 	inline function createReportJSON(){
 		var json = {
 			browserName         : browserName,
 			userAgent           : userAgent,
 			windowWidth         : windowWidth,
 			windowHeight        : windowHeight,
-			averageFPS          : Math.round(averageFPS * 100)/100,
-			// averageFrameTime : averageFrameTime + ' ms',
-			timeSamples         : timeSamples,
 			mouseClicks         : mouseClicks,
 			userData            : userData,
 		};
@@ -132,6 +116,6 @@ class BrowserMonitor{
 				error : consoleError,
 				warn  : consoleWarn
 			});
-		return haxe.Json.stringify(json);
+		return json;
 	}
 }
